@@ -1,0 +1,219 @@
+@import url('https://fonts.googleapis.com/css2?family=Bubblegum+Sans&family=Nunito:wght@400;600;700;800;900&display=swap');
+
+body {
+  font-family: 'Nunito', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at top, rgba(212, 164, 47, 0.08), transparent 34%),
+    linear-gradient(180deg, #08090c 0%, #08090c 52%, #08090c 100%);
+}
+
+.font-serif {
+  font-family: 'Bubblegum Sans', cursive;
+  letter-spacing: 1px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.kolka-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(31, 78, 121, 0.08), transparent 20%),
+    radial-gradient(circle at 85% 12%, rgba(212, 164, 47, 0.12), transparent 24%),
+    radial-gradient(circle at 50% 100%, rgba(31, 78, 121, 0.06), transparent 22%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.kolka-nav {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.kolka-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(8, 9, 12, 0.32), transparent 45%),
+    radial-gradient(circle at 78% 22%, rgba(212, 164, 47, 0.14), transparent 18%);
+  pointer-events: none;
+  z-index: 11;
+}
+
+.kolka-menu-section {
+  position: relative;
+  overflow: hidden;
+  background-color: transparent;
+}
+
+.kolka-menu-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(8, 9, 12, 0.03), transparent 28%, transparent 72%, rgba(31, 78, 121, 0.05)),
+    radial-gradient(circle at center, rgba(212, 164, 47, 0.09), transparent 48%);
+  pointer-events: none;
+}
+
+.kolka-menu-section > * {
+  position: relative;
+  z-index: 1;
+}
+
+.kolka-product-card {
+  background: linear-gradient(180deg, rgba(8, 9, 12, 0.98), rgba(8, 9, 12, 0.98));
+  border: 1px solid rgba(31, 78, 121, 0.08);
+  box-shadow: 0 18px 40px -26px rgba(8, 9, 12, 0.42);
+}
+
+.kolka-product-card:hover {
+  box-shadow: 0 28px 56px -28px rgba(31, 78, 121, 0.35);
+}
+
+.kolka-hub-section {
+  position: relative;
+  background-color: transparent;
+}
+
+.kolka-hub-section::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(212, 164, 47, 0.09), transparent 16%),
+    radial-gradient(circle at 88% 78%, rgba(31, 78, 121, 0.08), transparent 18%);
+  pointer-events: none;
+}
+
+.kolka-hub-section > * {
+  position: relative;
+  z-index: 1;
+}
+
+.kolka-footer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(212, 164, 47, 0.14), transparent 28%, transparent 72%, rgba(31, 78, 121, 0.18)),
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 44%);
+  pointer-events: none;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pureFadeInOut {
+  0% {
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 1;
+  }
+
+  70% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-pure-fade-in-out {
+  animation: pureFadeInOut 4s ease-in-out forwards;
+}
+
+@keyframes slideInUp12 {
+  from {
+    opacity: 0;
+    transform: translateY(3rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-in-from-bottom-12 {
+  animation: slideInUp12 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes loading-bar {
+  0% {
+    width: 0%;
+  }
+
+  100% {
+    width: 100%;
+  }
+}
+
+.animate-loading-bar {
+  animation: loading-bar 2.5s ease-in-out forwards;
+}
+
+@keyframes richFloat {
+  0%,
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    filter: drop-shadow(0 15px 15px rgba(31, 78, 121, 0.22));
+  }
+
+  50% {
+    transform: translateY(-15px) scale(1.03) rotate(1.5deg);
+    filter: drop-shadow(0 25px 25px rgba(212, 164, 47, 0.22));
+  }
+}
+
+.animate-rich-float {
+  animation: richFloat 5s ease-in-out infinite;
+}
+
+@keyframes zoomIn95 {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.zoom-in-95 {
+  animation: zoomIn95 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-pure-fade-in-out,
+  .animate-rich-float,
+  .slide-in-from-bottom-12,
+  .zoom-in-95 {
+    animation: none !important;
+  }
+}
