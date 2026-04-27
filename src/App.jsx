@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { collection, addDoc, serverTimestamp, query, where, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup } from 'firebase/auth';
-import { db, auth, googleProvider } from './src/firebase';
-import './src/App.css';
+import { db, auth, googleProvider } from './firebase';
+import './App.css';
 import confetti from 'canvas-confetti';
 import {
   ShoppingBag, Menu as MenuIcon, X, Plus, Minus, Clock, MapPin, Phone, Calendar,
