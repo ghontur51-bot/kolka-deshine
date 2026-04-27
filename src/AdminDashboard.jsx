@@ -15,7 +15,7 @@ import {
   Plus
 } from 'lucide-react';
 
-const ADMIN_PASSWORD = '7112232';
+const ADMIN_PASSWORD = '74391';
 const ADMIN_SESSION_KEY = 'luminaAdminUnlockedV2';
 
 export default function AdminDashboard() {
