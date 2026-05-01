@@ -97,6 +97,11 @@ const playSuccessChime = () => {
   playNote(659.25, 0.35, 3.0);
 };
 
+const PHONE_BRANDS = [
+  "Samsung", "Apple", "Vivo", "Oppo", "Xiaomi", "Redmi", "Poco", "Realme", 
+  "OnePlus", "Motorola", "iQOO", "Nothing", "Google Pixel", "Infinix", "Tecno"
+];
+
 export default function App() {
   const [isAppBooting, setIsAppBooting] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -126,6 +131,30 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedQty, setSelectedQty] = useState(1);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
+  const [selectedBrand, setSelectedBrand] = useState('');
+  const [selectedModel, setSelectedModel] = useState('');
+  const [quickAddProduct, setQuickAddProduct] = useState(null);
+  const [rememberDevice, setRememberDevice] = useState(false);
+
+  const loadSavedDevice = () => {
+    if (user?.uid) {
+      const saved = localStorage.getItem(`device_${user.uid}`);
+      if (saved) {
+        try {
+          const { brand, model } = JSON.parse(saved);
+          if (brand && model) {
+            setSelectedBrand(brand);
+            setSelectedModel(model);
+            setRememberDevice(true);
+            return;
+          }
+        } catch(e) {}
+      }
+    }
+    setSelectedBrand('');
+    setSelectedModel('');
+    setRememberDevice(false);
+  };
 
   const dynamicCategories = useMemo(() => {
     const cats = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
@@ -303,7 +332,10 @@ export default function App() {
       const customerData = {
         name: form.get('name'),
         phone: form.get('phone'),
-        address: form.get('address')
+        address: form.get('address'),
+        city: form.get('city'),
+        state: form.get('state'),
+        pincode: form.get('pincode')
       };
 
       const data = {
@@ -314,6 +346,13 @@ export default function App() {
         total: cartTotal,
         status: 'pending',
         payment_id: 'test_skip_razorpay',
+        shiprocket_ready: true,
+        package_details: {
+          weight: 0.2, // 200 grams standard phone cover
+          length: 15,
+          width: 8,
+          height: 2
+        },
         createdAt: serverTimestamp()
       };
 
@@ -325,11 +364,30 @@ export default function App() {
       triggerSuccessExperience("Order Confirmed!", "Your Kolkaa order has been placed and synced directly.");
       setBookingView('dashboard');
 
-      // Async Background Firestore Push (eliminates network lag)
-      addDoc(collection(db, 'orders'), data).catch(err => {
-        console.error("Firebase Sync Error", err);
-        alert("Background sync failed. Check connection.");
-      });
+      // Async Background Firestore Push and Shiprocket Sync
+      addDoc(collection(db, 'orders'), data)
+        .then(async (docRef) => {
+          // Push to Shiprocket
+          try {
+            const shiprocketRes = await fetch('/api/createShiprocketOrder', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderDetails: { ...data, orderId: docRef.id } })
+            });
+            const shipData = await shiprocketRes.json();
+            if (shipData.success) {
+              console.log("Shiprocket Order Created Successfully!", shipData);
+            } else {
+              console.error("Shiprocket API returned error:", shipData);
+            }
+          } catch(e) {
+            console.error("Failed to call Shiprocket API route:", e);
+          }
+        })
+        .catch(err => {
+          console.error("Firebase Sync Error", err);
+          alert("Background sync failed. Check connection.");
+        });
 
     } catch (err) {
       console.error(err);
@@ -457,7 +515,7 @@ export default function App() {
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-8">
           {filteredItems.map(item => (
-            <div key={item.id} onClick={() => { setSelectedProduct(item); setSelectedQty(1); setSelectedImageIdx(0); }} className="kolka-product-card group bg-[#08090C] rounded-2xl md:rounded-3xl p-3 md:p-4 shadow-sm flex flex-col relative animate-in slide-in-from-bottom-4 cursor-pointer hover:shadow-xl transition-all">
+            <div key={item.id} onClick={() => { setSelectedProduct(item); setSelectedQty(1); setSelectedImageIdx(0); loadSavedDevice(); }} className="kolka-product-card group bg-[#08090C] rounded-2xl md:rounded-3xl p-3 md:p-4 shadow-sm flex flex-col relative animate-in slide-in-from-bottom-4 cursor-pointer hover:shadow-xl transition-all">
               <div className="w-full aspect-square bg-[#11131a] rounded-xl md:rounded-2xl mb-3 md:mb-4 overflow-hidden relative">
                 <img src={(Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : (item.img || "https://images.unsplash.com/photo-1584820927498-cafe2c17ab7b?auto=format&fit=crop&w=400"))} onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1584820927498-cafe2c17ab7b?auto=format&fit=crop&w=400"; }} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 bg-transparent" />
                 <div className="absolute top-1 left-1 md:top-2 md:left-2 bg-[#08090C]/90 backdrop-blur-md px-1.5 py-0.5 rounded text-[8px] md:text-[10px] font-bold text-[#1F4E79]">{item.tag}</div>
@@ -468,7 +526,7 @@ export default function App() {
               </div>
               <div className="flex items-center justify-between pt-2 md:pt-3 border-t border-[#222]">
                 <span className="text-sm md:text-xl font-serif font-bold text-[#1F4E79]">₹{item.price.toFixed(2)}</span>
-                <button onClick={(e) => { e.stopPropagation(); addToCart(item, 1); }} className="bg-[#D4A42F] text-[#08090C] p-1.5 md:p-2.5 rounded-lg md:rounded-xl flex items-center justify-center transform transition-all active:scale-95 group-hover:rotate-6">
+                <button onClick={(e) => { e.stopPropagation(); setQuickAddProduct(item); setSelectedQty(1); loadSavedDevice(); }} className="bg-[#D4A42F] text-[#08090C] p-1.5 md:p-2.5 rounded-lg md:rounded-xl flex items-center justify-center transform transition-all active:scale-95 group-hover:rotate-6">
                   <ShoppingBag className="w-3 h-3 md:w-[18px] md:h-[18px]" />
                 </button>
               </div>
@@ -603,6 +661,46 @@ export default function App() {
                   <p className="text-sm text-[#1F4E79] font-medium leading-relaxed whitespace-pre-wrap">{selectedProduct.desc}</p>
                 </div>
 
+                <div className="mb-6 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-2">Device Brand</p>
+                    <div className="relative">
+                      <select value={selectedBrand} onChange={e => { setSelectedBrand(e.target.value); setSelectedModel(''); }} className="w-full bg-[#11131a] text-white border border-[#333] focus:border-[#D4A42F] rounded-xl p-3 text-sm outline-none appearance-none cursor-pointer transition-all">
+                        <option value="" disabled>Select Brand</option>
+                        {PHONE_BRANDS.map(brand => (
+                          <option key={brand} value={brand}>{brand}</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-2">Device Model</p>
+                    <input 
+                      type="text" 
+                      value={selectedModel} 
+                      onChange={e => setSelectedModel(e.target.value)} 
+                      disabled={!selectedBrand} 
+                      placeholder={selectedBrand ? `e.g. S24 Ultra` : `Select brand first`}
+                      className="w-full bg-[#11131a] text-white border border-[#333] focus:border-[#D4A42F] rounded-xl p-3 text-sm outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    />
+                  </div>
+                </div>
+
+                {user && (
+                  <div className="mb-6 -mt-2">
+                    <label className="flex items-center gap-2 cursor-pointer group w-max">
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${rememberDevice ? 'bg-[#D4A42F] border-[#D4A42F]' : 'border-[#333] bg-[#11131a] group-hover:border-[#D4A42F]'}`}>
+                        {rememberDevice && <Check size={12} className="text-[#08090C]" />}
+                      </div>
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider select-none">Remember my device choice</span>
+                      <input type="checkbox" checked={rememberDevice} onChange={(e) => setRememberDevice(e.target.checked)} className="hidden" />
+                    </label>
+                  </div>
+                )}
+
                 <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-2">Quantity</p>
                 <div className="flex items-center gap-4 bg-[#08090C] p-2 rounded-xl shadow-sm w-max border border-[#333] mb-6">
                   <button onClick={() => setSelectedQty(Math.max(1, selectedQty - 1))} className="w-10 h-10 rounded-lg bg-[#11131a] flex items-center justify-center text-white hover:bg-[#1a1f26] transition-colors"><Minus size={16} /></button>
@@ -611,13 +709,97 @@ export default function App() {
                 </div>
               </div>
 
-              <Button variant="primary" className="w-full py-5 text-lg font-bold shadow-[#D4A42F]/30 shadow-xl" onClick={() => {
-                addToCart(selectedProduct, selectedQty);
+              <Button variant="primary" disabled={!selectedBrand || !selectedModel} className="w-full py-5 text-lg font-bold shadow-[#D4A42F]/30 shadow-xl" onClick={() => {
+                if (user?.uid && rememberDevice && selectedBrand && selectedModel) {
+                  localStorage.setItem(`device_${user.uid}`, JSON.stringify({ brand: selectedBrand, model: selectedModel }));
+                } else if (user?.uid && !rememberDevice) {
+                  localStorage.removeItem(`device_${user.uid}`);
+                }
+                addToCart({
+                  ...selectedProduct,
+                  id: `${selectedProduct.id}-${selectedBrand}-${selectedModel}`,
+                  name: `${selectedProduct.name} (${selectedBrand} ${selectedModel})`
+                }, selectedQty);
                 setSelectedProduct(null);
               }}>
-                Add to Bag
+                {!selectedBrand || !selectedModel ? 'Select Device Model' : 'Add to Bag'}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK ADD DEVICE SELECTION MODAL */}
+      {quickAddProduct && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center px-4 overflow-hidden">
+          <div className="absolute inset-0 bg-[#08090C]/40 backdrop-blur-sm transition-opacity duration-500" onClick={() => setQuickAddProduct(null)} />
+
+          <div className="relative bg-[#08090C] border border-[#D4A42F]/20 rounded-[2.5rem] p-8 md:p-10 max-w-md w-full shadow-[0_20px_60px_-15px_rgba(212,164,47,0.15)] animate-in zoom-in-95 fade-in duration-300">
+            <button onClick={() => setQuickAddProduct(null)} className="absolute top-6 right-6 p-2 rounded-full hover:bg-white/5 text-gray-400 hover:text-white transition-all"><X size={20} /></button>
+            
+            <div className="mb-6 flex items-center gap-4 border-b border-[#D4A42F]/10 pb-6">
+              <img src={(Array.isArray(quickAddProduct.images) && quickAddProduct.images.length > 0 ? quickAddProduct.images[0] : (quickAddProduct.img || 'https://images.unsplash.com/photo-1584820927498-cafe2c17ab7b?auto=format&fit=crop&q=80&w=400'))} className="w-16 h-16 rounded-xl object-cover bg-[#11131a]" />
+              <div className="text-left">
+                <h3 className="text-xl font-serif font-bold text-white leading-tight mb-1">{quickAddProduct.name}</h3>
+                <p className="text-[#D4A42F] font-bold">₹{Number(quickAddProduct.price).toFixed(2)}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-8 text-left">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-2">Device Brand</p>
+                <div className="relative">
+                  <select value={selectedBrand} onChange={e => { setSelectedBrand(e.target.value); setSelectedModel(''); }} className="w-full bg-[#11131a] text-white border border-[#333] focus:border-[#D4A42F] rounded-xl p-3 text-sm outline-none appearance-none cursor-pointer transition-all">
+                    <option value="" disabled>Select Brand</option>
+                    {PHONE_BRANDS.map(brand => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-2">Device Model</p>
+                <input 
+                  type="text" 
+                  value={selectedModel} 
+                  onChange={e => setSelectedModel(e.target.value)} 
+                  disabled={!selectedBrand} 
+                  placeholder={selectedBrand ? `e.g. S24 Ultra` : `Select brand first`}
+                  className="w-full bg-[#11131a] text-white border border-[#333] focus:border-[#D4A42F] rounded-xl p-3 text-sm outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                />
+              </div>
+
+              {user && (
+                <div className="pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer group w-max">
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${rememberDevice ? 'bg-[#D4A42F] border-[#D4A42F]' : 'border-[#333] bg-[#11131a] group-hover:border-[#D4A42F]'}`}>
+                      {rememberDevice && <Check size={12} className="text-[#08090C]" />}
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider select-none">Remember my device choice</span>
+                    <input type="checkbox" checked={rememberDevice} onChange={(e) => setRememberDevice(e.target.checked)} className="hidden" />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <Button variant="primary" disabled={!selectedBrand || !selectedModel} className="w-full py-4 text-lg font-bold shadow-lg shadow-[#D4A42F]/20" onClick={() => {
+              if (user?.uid && rememberDevice && selectedBrand && selectedModel) {
+                localStorage.setItem(`device_${user.uid}`, JSON.stringify({ brand: selectedBrand, model: selectedModel }));
+              } else if (user?.uid && !rememberDevice) {
+                localStorage.removeItem(`device_${user.uid}`);
+              }
+              addToCart({
+                ...quickAddProduct,
+                id: `${quickAddProduct.id}-${selectedBrand}-${selectedModel}`,
+                name: `${quickAddProduct.name} (${selectedBrand} ${selectedModel})`
+              }, 1);
+              setQuickAddProduct(null);
+            }}>
+              {!selectedBrand || !selectedModel ? 'Select Device' : 'Add to Bag'}
+            </Button>
           </div>
         </div>
       )}
@@ -714,7 +896,21 @@ export default function App() {
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-2">Address</label>
-                <textarea name="address" required rows="3" placeholder="Apt 123, Coffee Street..." className="w-full bg-[#11131a] border-2 border-transparent focus:border-[#D4A42F] focus:bg-[#08090C] rounded-xl p-4 text-sm outline-none transition-all resize-none" />
+                <textarea name="address" required rows="2" placeholder="Apt 123, Coffee Street..." className="w-full bg-[#11131a] border-2 border-transparent focus:border-[#D4A42F] focus:bg-[#08090C] rounded-xl p-4 text-sm outline-none transition-all resize-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-2">City</label>
+                  <input name="city" required placeholder="Mumbai" className="w-full bg-[#11131a] border-2 border-transparent focus:border-[#D4A42F] focus:bg-[#08090C] rounded-xl p-4 text-sm outline-none transition-all" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-2">Pincode</label>
+                  <input name="pincode" required placeholder="400001" className="w-full bg-[#11131a] border-2 border-transparent focus:border-[#D4A42F] focus:bg-[#08090C] rounded-xl p-4 text-sm outline-none transition-all" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-2">State</label>
+                <input name="state" required placeholder="Maharashtra" className="w-full bg-[#11131a] border-2 border-transparent focus:border-[#D4A42F] focus:bg-[#08090C] rounded-xl p-4 text-sm outline-none transition-all" />
               </div>
 
               <Button type="submit" disabled={isLoading} variant="primary" className={`w-full py-4 text-lg font-bold shadow-lg mt-4 ${isLoading ? 'opacity-50 cursor-not-allowed shadow-none' : 'shadow-[#D4A42F]/20'}`}>
