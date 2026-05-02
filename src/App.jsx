@@ -175,6 +175,44 @@ export default function App() {
     return () => { unsubscribe(); unsubProducts(); };
   }, []);
 
+  // Handle PayU Redirect Returns
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get('payment');
+    
+    if (paymentStatus === 'success') {
+      const pendingStr = localStorage.getItem('kolkaa_pending_order');
+      if (pendingStr) {
+        try {
+          const pendingOrder = JSON.parse(pendingStr);
+          pendingOrder.status = 'paid';
+          pendingOrder.payment_id = params.get('txnid') || 'payu_success';
+          
+          // Execute background saves
+          addDoc(collection(db, 'orders'), pendingOrder).then(async (docRef) => {
+            fetch('/api/createShiprocketOrder', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderDetails: { ...pendingOrder, orderId: docRef.id } })
+            });
+          });
+
+          localStorage.removeItem('kolkaa_pending_order');
+          setCart([]);
+          triggerSuccessExperience("Payment Successful!", "Your Kolkaa order has been placed and is being prepared.");
+          
+          // Clean URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch(e) {
+          console.error("Error processing pending order", e);
+        }
+      }
+    } else if (paymentStatus === 'failed') {
+      alert("Payment failed. Please try again.");
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   // Auto-login modal popup after 5 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -310,13 +348,13 @@ export default function App() {
     return true;
   };
 
-  const loadRazorpay = () => {
+  const loadCashfree = () => {
     return new Promise((resolve) => {
-      if (window.Razorpay) return resolve(true);
+      if (window.Cashfree) return resolve(window.Cashfree({ mode: "sandbox" }));
       const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
+      script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
+      script.onload = () => resolve(window.Cashfree({ mode: "sandbox" }));
+      script.onerror = () => resolve(null);
       document.body.appendChild(script);
     });
   };
@@ -345,49 +383,51 @@ export default function App() {
         items: cart,
         total: cartTotal,
         status: 'pending',
-        payment_id: 'test_skip_razorpay',
         shiprocket_ready: true,
         package_details: {
           weight: 0.2, // 200 grams standard phone cover
           length: 15,
           width: 8,
           height: 2
-        },
-        createdAt: serverTimestamp()
+        }
       };
 
-      // ==========================================
-      // BUTTER SMOOTH UX: Immediate Success Trigger
-      // ==========================================
-      setCart([]);
-      setIsCheckoutModalOpen(false);
-      triggerSuccessExperience("Order Confirmed!", "Your Kolkaa order has been placed and synced directly.");
-      setBookingView('dashboard');
+      // Generate unique transaction ID
+      const txnid = `txn_${Date.now()}`;
+      
+      // Save pending order to localStorage to process after redirect
+      localStorage.setItem('kolkaa_pending_order', JSON.stringify({ ...data, createdAt: Date.now() }));
 
-      // Async Background Firestore Push and Shiprocket Sync
-      addDoc(collection(db, 'orders'), data)
-        .then(async (docRef) => {
-          // Push to Shiprocket
-          try {
-            const shiprocketRes = await fetch('/api/createShiprocketOrder', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ orderDetails: { ...data, orderId: docRef.id } })
-            });
-            const shipData = await shiprocketRes.json();
-            if (shipData.success) {
-              console.log("Shiprocket Order Created Successfully!", shipData);
-            } else {
-              console.error("Shiprocket API returned error:", shipData);
-            }
-          } catch(e) {
-            console.error("Failed to call Shiprocket API route:", e);
-          }
-        })
-        .catch(err => {
-          console.error("Firebase Sync Error", err);
-          alert("Background sync failed. Check connection.");
-        });
+      // Fetch Session from Vercel Backend
+      const cashfreeData = {
+        orderId: txnid,
+        amount: cartTotal.toFixed(2),
+        customerName: customerData.name.split(' ')[0],
+        customerEmail: user.email || 'customer@kolkadeshine.in',
+        customerPhone: customerData.phone
+      };
+
+      const sessionRes = await fetch('/api/createCashfreeOrder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cashfreeData)
+      });
+      
+      const sessionData = await sessionRes.json();
+
+      if (!sessionData.payment_session_id) {
+        throw new Error("Failed to generate payment session. Check API.");
+      }
+
+      const cashfree = await loadCashfree();
+      if (!cashfree) {
+        throw new Error("Failed to load Cashfree SDK.");
+      }
+
+      cashfree.checkout({
+        paymentSessionId: sessionData.payment_session_id,
+        redirectTarget: "_self" 
+      });
 
     } catch (err) {
       console.error(err);
