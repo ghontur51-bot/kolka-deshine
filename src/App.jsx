@@ -175,43 +175,7 @@ export default function App() {
     return () => { unsubscribe(); unsubProducts(); };
   }, []);
 
-  // Handle PayU Redirect Returns
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const paymentStatus = params.get('payment');
-    
-    if (paymentStatus === 'success') {
-      const pendingStr = localStorage.getItem('kolkaa_pending_order');
-      if (pendingStr) {
-        try {
-          const pendingOrder = JSON.parse(pendingStr);
-          pendingOrder.status = 'paid';
-          pendingOrder.payment_id = params.get('txnid') || 'payu_success';
-          
-          // Execute background saves
-          addDoc(collection(db, 'orders'), pendingOrder).then(async (docRef) => {
-            fetch('/api/createShiprocketOrder', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ orderDetails: { ...pendingOrder, orderId: docRef.id } })
-            });
-          });
 
-          localStorage.removeItem('kolkaa_pending_order');
-          setCart([]);
-          triggerSuccessExperience("Payment Successful!", "Your Kolkaa order has been placed and is being prepared.");
-          
-          // Clean URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch(e) {
-          console.error("Error processing pending order", e);
-        }
-      }
-    } else if (paymentStatus === 'failed') {
-      alert("Payment failed. Please try again.");
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
 
   // Auto-login modal popup after 5 seconds
   useEffect(() => {
@@ -348,13 +312,13 @@ export default function App() {
     return true;
   };
 
-  const loadCashfree = () => {
+  const loadRazorpay = () => {
     return new Promise((resolve) => {
-      if (window.Cashfree) return resolve(window.Cashfree({ mode: "sandbox" }));
+      if (window.Razorpay) return resolve(true);
       const script = document.createElement("script");
-      script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
-      script.onload = () => resolve(window.Cashfree({ mode: "sandbox" }));
-      script.onerror = () => resolve(null);
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
       document.body.appendChild(script);
     });
   };
@@ -392,42 +356,74 @@ export default function App() {
         }
       };
 
-      // Generate unique transaction ID
-      const txnid = `txn_${Date.now()}`;
-      
-      // Save pending order to localStorage to process after redirect
-      localStorage.setItem('kolkaa_pending_order', JSON.stringify({ ...data, createdAt: Date.now() }));
-
-      // Fetch Session from Vercel Backend
-      const cashfreeData = {
-        orderId: txnid,
-        amount: cartTotal.toFixed(2),
-        customerName: customerData.name.split(' ')[0],
-        customerEmail: user.email || 'customer@kolkadeshine.in',
-        customerPhone: customerData.phone
-      };
-
-      const sessionRes = await fetch('/api/createCashfreeOrder', {
+      const res = await fetch('/api/createOrder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cashfreeData)
+        body: JSON.stringify({ amount: cartTotal })
       });
+      const orderData = await res.json();
       
-      const sessionData = await sessionRes.json();
+      if (!orderData.order) throw new Error("Could not create Razorpay order. Check API.");
 
-      if (!sessionData.payment_session_id) {
-        throw new Error("Failed to generate payment session. Check API.");
-      }
+      const isLoaded = await loadRazorpay();
+      if (!isLoaded) throw new Error("Razorpay SDK failed to load. Are you offline?");
 
-      const cashfree = await loadCashfree();
-      if (!cashfree) {
-        throw new Error("Failed to load Cashfree SDK.");
-      }
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_SlLNPssVEb5UN1',
+        amount: orderData.order.amount,
+        currency: "INR",
+        name: "Kolkaa Designs",
+        description: "Premium Purchase",
+        order_id: orderData.order.id,
+        handler: async function (response) {
+          data.payment_id = response.razorpay_payment_id;
+          data.razorpay_order_id = response.razorpay_order_id;
+          data.razorpay_signature = response.razorpay_signature;
+          data.status = 'paid';
+          data.createdAt = serverTimestamp();
 
-      cashfree.checkout({
-        paymentSessionId: sessionData.payment_session_id,
-        redirectTarget: "_self" 
+          setCart([]);
+          setIsCheckoutModalOpen(false);
+          triggerSuccessExperience("Payment Successful!", "Your Kolkaa piece has been secured.");
+          setBookingView('dashboard');
+
+          // Async Background Firestore Push and Shiprocket Sync
+          addDoc(collection(db, 'orders'), data)
+            .then(async (docRef) => {
+              // Push to Shiprocket silently
+              try {
+                const shiprocketRes = await fetch('/api/createShiprocketOrder', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ orderDetails: { ...data, orderId: docRef.id } })
+                });
+                const shipData = await shiprocketRes.json();
+                if (shipData.success) {
+                  console.log("Shiprocket Order Created Successfully!");
+                }
+              } catch(e) {
+                console.error("Failed to call Shiprocket API route:", e);
+              }
+            })
+            .catch(err => {
+              console.error("Firebase Sync Error", err);
+            });
+        },
+        prefill: {
+          name: customerData.name,
+          email: user.email,
+          contact: customerData.phone
+        },
+        theme: {
+          color: "#D4A42F"
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response){
+        alert("Payment Failed: " + response.error.description);
       });
+      rzp.open();
 
     } catch (err) {
       console.error(err);
